@@ -1,11 +1,15 @@
-VERSION 1
-option GeneratorNetworkDebug {
-    type = boolean;
-    default = true;
+VERSION = 1,
+
+option GeneratorNetwork.Debug
+{
+    type = boolean, default = true,
+    page = GeneratorNetwork,
+    translation = GeneratorNetwork_Debug,
 }
-option GeneratorNetworkRadius {
-    type = integer;
-    default = 20;
-    min = 5;
-    max = 50;
+
+option GeneratorNetwork.Radius
+{
+    type = integer, min = 5, max = 50, default = 20,
+    page = GeneratorNetwork,
+    translation = GeneratorNetwork_Radius,
 }

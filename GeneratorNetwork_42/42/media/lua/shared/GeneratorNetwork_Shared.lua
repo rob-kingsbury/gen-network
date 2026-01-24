@@ -33,11 +33,13 @@ local function _getCell()
 end
 
 function GN.applySandboxOptions()
-    if SandboxVars and SandboxVars.GeneratorNetworkDebug ~= nil then
-        GN.DEBUG = SandboxVars.GeneratorNetworkDebug
-    end
-    if SandboxVars and SandboxVars.GeneratorNetworkRadius ~= nil then
-        GN.ClusterRadius = SandboxVars.GeneratorNetworkRadius
+    if SandboxVars and SandboxVars.GeneratorNetwork then
+        if SandboxVars.GeneratorNetwork.Debug ~= nil then
+            GN.DEBUG = SandboxVars.GeneratorNetwork.Debug
+        end
+        if SandboxVars.GeneratorNetwork.Radius ~= nil then
+            GN.ClusterRadius = SandboxVars.GeneratorNetwork.Radius
+        end
     end
     _log(string.format("applySandboxOptions: DEBUG=%s radius=%d",
         tostring(GN.DEBUG), tonumber(GN.ClusterRadius or 0)))
@@ -147,7 +149,7 @@ function GN.distributeFuelEvenly(gens)
     end
 end
 
--- Cluster activation using vanilla activate()/deactivate() for proper FX and lights,
+-- Cluster activation using setActivated() + setSurroundingElectricity(),
 -- wrapped in our connection + fuel/condition checks.
 function GN.setClusterActivated(playerObj, gens, flag)
     if not gens or #gens == 0 then
@@ -186,14 +188,9 @@ function GN.setClusterActivated(playerObj, gens, flag)
                     end
                 else
                     if not active then
-                        _log(string.format("[POWER] activating gen at %d,%d,%d via activate()", x, y, z))
-                        if gen.activate then
-                            gen:activate()
-                        else
-                            -- Fallback, shouldn't normally happen.
-                            gen:setActivated(true)
-                            gen:setSurroundingElectricity()
-                        end
+                        _log(string.format("[POWER] activating gen at %d,%d,%d", x, y, z))
+                        gen:setActivated(true)
+                        gen:setSurroundingElectricity()
                     else
                         _log(string.format("[POWER] gen at %d,%d,%d already active, skipping", x, y, z))
                     end
@@ -201,13 +198,9 @@ function GN.setClusterActivated(playerObj, gens, flag)
             else
                 -- Turn cluster OFF
                 if active then
-                    _log(string.format("[POWER] deactivating gen at %d,%d,%d via deactivate()", x, y, z))
-                    if gen.deactivate then
-                        gen:deactivate()
-                    else
-                        gen:setActivated(false)
-                        gen:setSurroundingElectricity()
-                    end
+                    _log(string.format("[POWER] deactivating gen at %d,%d,%d", x, y, z))
+                    gen:setActivated(false)
+                    gen:setSurroundingElectricity()
                 else
                     _log(string.format("[POWER] gen at %d,%d,%d already inactive, skipping", x, y, z))
                 end

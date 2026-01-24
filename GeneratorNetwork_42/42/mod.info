@@ -1,6 +1,0 @@
-name=Generator Network
-id=GeneratorNetwork
-description=Linked vanilla generators into a simple fuel-sharing and activation cluster with cluster coverage highlight. Build 42.12+
-modversion=0.8.8
-pzversion=42.12
-poster=poster.png
