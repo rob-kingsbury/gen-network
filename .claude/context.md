@@ -1,8 +1,8 @@
 ---
 project: Generator Network
 description: PZ mod — industrial generator system with building-based power, CO suppression, extended fuel tanks
-last_session: 2
-continue_with: "Phase 1 v2.0 — finish Client/Server Lua rewrites, then in-game CO suppression prototype test"
+last_session: 3
+continue_with: "In-game CO suppression test (P0), then Phase 2 extended fuel tank"
 
 tech:
   stack: pz-lua-mod
@@ -15,7 +15,6 @@ paths:
   shared: GeneratorNetwork_42/42/media/lua/shared/
   client: GeneratorNetwork_42/42/media/lua/client/
   server: GeneratorNetwork_42/42/media/lua/server/
-  plan: .claude/plans/typed-wobbling-bubble.md
 
 commands:
   issues: gh issue list --state open
@@ -43,7 +42,7 @@ A Project Zomboid mod (Build 42.12+) that provides industrial generator behavior
 ## Current Phase
 
 - **v1.0**: Core cluster system (COMPLETE — v0.9.0)
-- **v2.0 Phase 1**: Building power + CO suppression (IN PROGRESS — _Shared.lua rewritten, Client/Server pending)
+- **v2.0 Phase 1**: Building power + CO suppression (CODE COMPLETE — all 3 Lua files rewritten, needs in-game CO test)
 - **v2.0 Phase 2**: Extended fuel tank via ModData (PENDING)
 - **v2.0 Phase 3**: ATS auto-start (PENDING — Issue #15, deferrable)
 - **v2.0 Phase 4**: Silo generator sprite (PENDING — Issue #14)
@@ -110,7 +109,7 @@ Java `IsoGenerator.update()` calls `building:setToxic(true)` every tick. Must us
 
 | Metric | Value |
 |--------|-------|
-| Mod version | 0.9.0 (v2.0 in progress) |
+| Mod version | 2.0.0 |
 | Open issues | 4 (#4, #13, #14, #15) |
 | Closed issues | 11 (#1-#3, #5-#12) |
 | Branches | 1 (main) |
@@ -178,8 +177,31 @@ Java `IsoGenerator.update()` calls `building:setToxic(true)` every tick. Must us
 - Investigated wink-'s full GitHub — determined neither MCP server is useful for our Lua mod work
 
 **Not yet done:**
-- Client Lua rewrite (building-aware context menu, coverage highlight)
-- Server Lua rewrite (new command handlers for building power)
-- sandbox-options.txt update (TankCapacity, AutoStartEnabled, AutoStartDelay)
-- mod.info version bump to 2.0.0
 - In-game CO suppression prototype test (P0 — must do before other features)
+
+### Session 3 (2026-02-16): Phase 1 Code Complete
+
+**Implementation:**
+- Rewrote `_Client.lua` for v2.0: building-aware context menu, building coverage highlighting, radius fallback
+- Rewrote `_Server.lua` for v2.0: building + radius command routing, proper `setGeneratorsActivated` calls
+- Added `RadiusResult` command constant to `_Shared.lua`
+- Added `TankCapacity` sandbox option (integer, 10-5000, default 500) + translation
+- Bumped `mod.info` to v2.0.0 with updated description
+- Updated Radius tooltip to mention outdoor/non-building context
+
+**Client v2.0 key changes:**
+- `getBuildingForGen()` determines building vs radius mode on right-click
+- Building mode: "Turn Building On/Off", "Refuel Building Generators", "Show Building Coverage"
+- Radius fallback: "Turn Cluster On/Off", "Refuel Cluster", "Show Cluster Coverage"
+- `showBuildingCoverage(building)` highlights all building squares
+- `showRadiusCoverage(sq)` preserves v1.0 radius highlighting
+- Server response handler accepts both `BuildingResult` and `RadiusResult`
+
+**Server v2.0 key changes:**
+- `_getGenAt(x,y,z)` helper for coordinate-based generator lookup
+- Building commands: gen lookup → `getBuildingForGen` → `getGeneratorsInBuilding` → execute
+- Radius commands: `getGeneratorsAround` → execute without building param
+- All handlers send proper feedback via `sendServerCommand`
+
+**Not yet done:**
+- In-game CO suppression prototype test (P0 — must do before relying on building power)

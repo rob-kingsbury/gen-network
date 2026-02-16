@@ -1,5 +1,6 @@
 -- GeneratorNetwork_Client.lua
--- Client-side context menu + command sender for Generator Network 0.9.0
+-- Client-side context menu + command sender for Generator Network 2.0.0
+-- Building-aware: detects building vs outdoor placement, adapts menu and coverage.
 
 require "GeneratorNetwork_Shared"
 
@@ -11,7 +12,7 @@ local function _log(msg)
 end
 
 -- ------------------------------------------------------------------------
--- Cluster coverage highlighting (visual only, client-side)
+-- Coverage highlighting (visual only, client-side)
 -- ------------------------------------------------------------------------
 
 GN.HighlightSquares = GN.HighlightSquares or {}
@@ -30,7 +31,31 @@ function GN.clearCoverageHighlights()
     _log("[COVERAGE] cleared highlights")
 end
 
-function GN.showClusterCoverageFromSquare(sq)
+--- Highlight all squares belonging to a building.
+function GN.showBuildingCoverage(building)
+    if not building then return end
+
+    GN.clearCoverageHighlights()
+
+    local squares = GN.getAllBuildingSquares(building)
+    if #squares == 0 then
+        GN.notifyPlayer(getSpecificPlayer(0), "No building squares found.")
+        return
+    end
+
+    for _, sq in ipairs(squares) do
+        local floor = sq:getFloor()
+        if floor then
+            floor:setHighlighted(true)
+            table.insert(GN.HighlightSquares, sq)
+        end
+    end
+
+    _log(string.format("[COVERAGE] highlighted %d building squares", #GN.HighlightSquares))
+end
+
+--- Highlight radius coverage around all generators in a cluster (v1.0 fallback).
+function GN.showRadiusCoverage(sq)
     if not sq then return end
 
     local cell = getCell()
@@ -39,26 +64,22 @@ function GN.showClusterCoverageFromSquare(sq)
         return
     end
 
-    -- Clear any previous coverage before drawing a new one.
     GN.clearCoverageHighlights()
 
     local x, y, z = sq:getX(), sq:getY(), sq:getZ()
     local radius = GN.ClusterRadius or 20
 
-    _log(string.format("[COVERAGE] starting coverage from %d,%d,%d radius=%d", x, y, z, radius))
+    _log(string.format("[COVERAGE] radius coverage from %d,%d,%d radius=%d", x, y, z, radius))
 
     local gens = GN.getGeneratorsAround(x, y, z, radius)
-    _log(string.format("[COVERAGE] coverage cluster has %d generators", #gens))
-
     if #gens == 0 then
         GN.notifyPlayer(getSpecificPlayer(0), "No generators found in this cluster.")
         return
     end
 
     for _, gen in ipairs(gens) do
-        if GN.isValidGen and GN.isValidGen(gen) then
+        if GN.isValidGen(gen) then
             local gx, gy, gz = gen:getX(), gen:getY(), gen:getZ()
-            _log(string.format("[COVERAGE] processing gen at %d,%d,%d", gx, gy, gz))
             for wx = gx - radius, gx + radius do
                 for wy = gy - radius, gy + radius do
                     local sq2 = cell:getGridSquare(wx, wy, gz)
@@ -71,16 +92,14 @@ function GN.showClusterCoverageFromSquare(sq)
                     end
                 end
             end
-        else
-            _log("[COVERAGE] skipping invalid generator in coverage cluster")
         end
     end
 
-    _log(string.format("[COVERAGE] highlighted %d squares", #GN.HighlightSquares))
+    _log(string.format("[COVERAGE] highlighted %d radius squares", #GN.HighlightSquares))
 end
 
 -- ------------------------------------------------------------------------
--- Context menu + cluster commands
+-- Context menu
 -- ------------------------------------------------------------------------
 
 local function getGeneratorFromWorldObjects(worldobjects)
@@ -109,7 +128,7 @@ local function onFillWorldObjectContextMenu(playerNum, context, worldobjects, te
 
     local gen, sq = getGeneratorFromWorldObjects(worldobjects)
 
-    -- Only clear coverage when opening a generator context menu (not all menus).
+    -- Clear coverage when opening a generator context menu.
     if gen then
         GN.clearCoverageHighlights()
     end
@@ -123,21 +142,44 @@ local function onFillWorldObjectContextMenu(playerNum, context, worldobjects, te
         sendClientCommand(GN.ModId, action, { x = x, y = y, z = z })
     end
 
-    context:addOption("Refuel Cluster", nil, function()
-        send(CMD.RefuelCluster)
-    end)
+    -- Detect building vs radius mode.
+    local building = GN.getBuildingForGen(gen)
 
-    context:addOption("Turn Cluster On", nil, function()
-        send(CMD.ClusterOn)
-    end)
+    if building then
+        -- Building mode: power the entire building through wiring.
+        context:addOption("Turn Building On", nil, function()
+            send(CMD.BuildingOn)
+        end)
 
-    context:addOption("Turn Cluster Off", nil, function()
-        send(CMD.ClusterOff)
-    end)
+        context:addOption("Turn Building Off", nil, function()
+            send(CMD.BuildingOff)
+        end)
 
-    context:addOption("Show Cluster Coverage", nil, function()
-        GN.showClusterCoverageFromSquare(sq)
-    end)
+        context:addOption("Refuel Building Generators", nil, function()
+            send(CMD.RefuelBuilding)
+        end)
+
+        context:addOption("Show Building Coverage", nil, function()
+            GN.showBuildingCoverage(building)
+        end)
+    else
+        -- Radius fallback: v1.0 cluster behavior for outdoor/player-built placement.
+        context:addOption("Turn Cluster On", nil, function()
+            send(CMD.RadiusOn)
+        end)
+
+        context:addOption("Turn Cluster Off", nil, function()
+            send(CMD.RadiusOff)
+        end)
+
+        context:addOption("Refuel Cluster", nil, function()
+            send(CMD.RefuelRadius)
+        end)
+
+        context:addOption("Show Cluster Coverage", nil, function()
+            GN.showRadiusCoverage(sq)
+        end)
+    end
 
     context:addOption("Clear Coverage", nil, function()
         GN.clearCoverageHighlights()
@@ -152,14 +194,15 @@ Events.OnFillWorldObjectContextMenu.Add(onFillWorldObjectContextMenu)
 
 local function onServerCommand(module, command, args)
     if module ~= GN.ModId then return end
-    if command ~= CMD.ClusterResult then return end
 
-    if args then
-        _log(string.format("[CL] ClusterResult: action=%s",
-            tostring(args.action or "?")))
+    if command == CMD.BuildingResult or command == CMD.RadiusResult then
+        if args then
+            _log(string.format("[CL] Result: command=%s action=%s",
+                tostring(command), tostring(args.action or "?")))
+        end
     end
 end
 
 Events.OnServerCommand.Add(onServerCommand)
 
-_log("Client script loaded")
+_log("Client script loaded (v2.0.0)")

@@ -27,6 +27,7 @@ GN.Commands = {
     RadiusOn        = "RadiusOn",
     RadiusOff       = "RadiusOff",
     RefuelRadius    = "RefuelRadius",
+    RadiusResult    = "RadiusResult",
 }
 
 -- Managed buildings: keyed by building ID, each entry tracks active generators.

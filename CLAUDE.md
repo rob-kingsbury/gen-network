@@ -1,8 +1,8 @@
 # Generator Network
 
-A Project Zomboid mod (B42.12+) that links vanilla generators into fuel-sharing, activation clusters with visual coverage highlighting. Replaces the vanilla per-generator radius model with a networked cluster approach.
+A Project Zomboid mod (B42.12+) that provides industrial generator behavior: building-based power delivery, indoor CO suppression, fuel sharing, and coverage highlighting. Radius fallback for outdoor/non-building placement.
 
-**Repo:** `rob-kingsbury/gen-network` | **Mod ID:** `GeneratorNetwork` | **Version:** 0.9.0
+**Repo:** `rob-kingsbury/gen-network` | **Mod ID:** `GeneratorNetwork` | **Version:** 2.0.0
 
 ---
 
@@ -70,29 +70,36 @@ GeneratorNetwork_42/
 
 | Layer | File | Runs On | Responsibility |
 |-------|------|---------|----------------|
-| **Shared** | `_Shared.lua` | Both | Cluster discovery, fuel distribution, activation logic, validation |
-| **Client** | `_Client.lua` | Client | Context menu, coverage highlighting, `sendClientCommand()` |
-| **Server** | `_Server.lua` | Server | `OnClientCommand` handler, executes shared logic, syncs state |
+| **Shared** | `_Shared.lua` | Both | Building detection, power delivery, CO suppression, fuel distribution, validation |
+| **Client** | `_Client.lua` | Client | Building/radius context menu, coverage highlighting, `sendClientCommand()` |
+| **Server** | `_Server.lua` | Server | `OnClientCommand` handler, building/radius routing, executes shared logic |
 
 ### Communication Flow
 
 ```
-Player right-clicks generator → Client adds context menu options
-    → Player clicks option → Client sends command (module, action, {x,y,z})
-    → Server receives via OnClientCommand → Finds cluster via getGeneratorsAround()
-    → Server executes action → Syncs changes via sendObjectChange()
+Player right-clicks generator → Client detects building vs outdoor placement
+    → Building mode: "Turn Building On/Off", "Refuel Building Generators"
+    → Radius mode: "Turn Cluster On/Off", "Refuel Cluster"
+    → Client sends command (module, action, {x,y,z})
+    → Server receives via OnClientCommand → Finds building or radius cluster
+    → Server executes action → Syncs changes, sends result back to client
 ```
 
 ### Key Functions
 
 | Function | Location | Purpose |
 |----------|----------|---------|
-| `GN.getGeneratorsAround(x,y,z,r)` | Shared | Find all valid generators within radius |
-| `GN.distributeFuelEvenly(gens)` | Shared | Pool and equalize fuel across cluster |
-| `GN.setClusterActivated(player,gens,flag)` | Shared | Activate/deactivate all generators in cluster |
+| `GN.getBuildingForGen(gen)` | Shared | Find IsoBuilding for a generator (+ adjacent square fallback) |
+| `GN.getAllBuildingSquares(building)` | Shared | Get all grid squares in a building via RoomDef rects |
+| `GN.powerBuilding(building, flag)` | Shared | Set haveElectricity on all building squares |
+| `GN.refreshBuildingPower(building)` | Shared | Re-check active generators, clear power if none |
+| `GN.setGeneratorsActivated(player,gens,flag,building)` | Shared | Activate/deactivate with building power support |
+| `GN.getGeneratorsAround(x,y,z,r)` | Shared | Find generators within radius (outdoor fallback) |
+| `GN.distributeFuelEvenly(gens)` | Shared | Pool and equalize fuel across generators |
 | `GN.isValidGen(gen)` | Shared | Validate generator (instanceof, square, index) |
-| `GN.showClusterCoverageFromSquare(sq)` | Client | Highlight coverage area on floors |
-| `onClientCommand(module,cmd,player,args)` | Server | Route commands to shared logic |
+| `GN.showBuildingCoverage(building)` | Client | Highlight all building squares |
+| `GN.showRadiusCoverage(sq)` | Client | Highlight radius coverage (v1.0 fallback) |
+| `onClientCommand(module,cmd,player,args)` | Server | Route building/radius commands to shared logic |
 
 ---
 

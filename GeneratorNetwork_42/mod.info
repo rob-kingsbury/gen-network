@@ -1,6 +1,6 @@
 name=Generator Network
 id=GeneratorNetwork
-description=Linked vanilla generators into a simple fuel-sharing and activation cluster with cluster coverage highlight. Build 42.12+
-modversion=0.9.0
+description=Industrial generator system: building-based power delivery, indoor CO suppression, fuel sharing, and coverage highlighting. Build 42.12+
+modversion=2.0.0
 versionMin=42.12.0
 poster=42/poster.png

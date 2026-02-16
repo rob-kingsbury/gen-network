@@ -1,4 +1,6 @@
 Sandbox_GeneratorNetwork_Debug = "Debug Logging",
 Sandbox_GeneratorNetwork_Debug_tooltip = "If enabled, Generator Network will print detailed debug information to the console log.",
 Sandbox_GeneratorNetwork_Radius = "Cluster Radius",
-Sandbox_GeneratorNetwork_Radius_tooltip = "Maximum distance in tiles when searching for linked generators. Vanilla generator radius is 20.",
+Sandbox_GeneratorNetwork_Radius_tooltip = "Maximum distance in tiles when searching for linked generators. Used for outdoor/non-building placement. Vanilla generator radius is 20.",
+Sandbox_GeneratorNetwork_TankCapacity = "Extended Tank Capacity",
+Sandbox_GeneratorNetwork_TankCapacity_tooltip = "Fuel capacity in liters for generator extended tanks. Vanilla generators hold about 10 liters. Default 500.",
