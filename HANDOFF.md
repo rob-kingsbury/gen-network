@@ -2,7 +2,15 @@
 
 ## Current Priority
 
-**Issue #4: MP fuel sync** - `sendObjectChange("fuel")` may not propagate fuel display to clients. Investigate `gen:sync(fuel, cond, connected, activated)` as alternative. Needs in-game MP testing.
+**v2.0 Phase 1: Building Power + CO Suppression**
+
+`_Shared.lua` has been rewritten with the v2.0 building power system. Next steps:
+1. Rewrite `_Client.lua` — building-aware context menu, building coverage highlight
+2. Rewrite `_Server.lua` — new command handlers for BuildingOn/Off, RefuelBuilding
+3. Update `sandbox-options.txt` — add TankCapacity (Phase 2 prep)
+4. **In-game CO suppression test** — P0 showstopper, must verify OnTick approach works
+
+Full plan: `.claude/plans/typed-wobbling-bubble.md`
 
 ---
 
@@ -10,21 +18,24 @@
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Core Cluster Logic | Complete | getGeneratorsAround, distributeFuel, setClusterActivated |
-| Client UI | Complete | Context menu with 5 options, coverage highlighting |
-| Server Commands | Complete | RefuelCluster, ClusterOn, ClusterOff with feedback |
-| Sandbox Options | Complete | Debug logging (default off), Cluster radius |
-| B42 API Compat | Complete | Fixed in e556a29, refined in 7fc33d2 |
-| MP Fuel Sync | Needs Investigation | Issue #4 — sendObjectChange vs sync() |
-| Workshop Upload | Not Started | No releases or tags yet |
-| Claude Scaffold | Complete | CLAUDE.md, context.md, 4 rules files, HANDOFF.md |
-| .gitignore | Complete | Comprehensive patterns for PZ/IDE/OS/tooling |
+| v2.0 Plan | Approved | 4 phases, 9 risk mitigations documented |
+| _Shared.lua v2.0 | Rewritten | Building power, CO suppression, radius fallback |
+| _Client.lua v2.0 | NOT STARTED | Still v1.0 cluster-based code |
+| _Server.lua v2.0 | NOT STARTED | Still v1.0 command handlers |
+| sandbox-options.txt | Needs Update | Add TankCapacity, AutoStartEnabled, AutoStartDelay |
+| mod.info | Needs Update | Version bump to 2.0.0 |
+| CO Suppression | UNTESTED | P0 risk — OnTick vs Java tick race condition |
+| Extended Fuel Tank | Not Started | Phase 2, ModData-based |
+| ATS Auto-Start | Not Started | Phase 3, Issue #15, deferrable |
+| Silo Generator Sprite | Not Started | Phase 4, Issue #14, needs in-game identification |
+| Extension Cord | Not Started | Issue #13, future enhancement |
+| MP Fuel Sync | Not Started | Issue #4, from v1.0 |
 
 ---
 
 ## Blockers
 
-- **Issue #4** needs in-game MP testing to confirm whether `sendObjectChange("fuel")` works or if `gen:sync()` is required
+- **CO suppression must be tested in-game** before building the full Client/Server rewrite. If OnTick can't outrace Java's `setToxic(true)`, backup plans: ventilation check via adjacent outdoor squares, or require outdoor placement.
 
 ---
 
@@ -32,59 +43,58 @@
 
 | Decision | Why | Date |
 |----------|-----|------|
-| Use setActivated() + setSurroundingElectricity() | activate()/deactivate() don't exist in B42 | 2026-01-24 |
-| VERSION = 1 sandbox format | Required by B42, old format silently fails | 2026-01-24 |
-| Nested SandboxVars access | B42 uses dotted option names = nested Lua tables | 2026-01-24 |
-| Claude scaffold setup | Codify project knowledge, improve dev workflow | 2026-02-15 |
-| Command constants in Shared | Single source of truth, eliminates string duplication | 2026-02-15 |
-| Keep translation flat format | Works in-game; wrapper format has conflicting sources | 2026-02-15 |
-| Version bump to 0.9.0 | Significant quality improvements across all 3 Lua files | 2026-02-15 |
+| Building-based power model | Real generators power buildings through wiring, not radius | 2026-02-16 |
+| OnTick for CO suppression | EveryOneMinute too slow — Java sets toxic every tick | 2026-02-16 |
+| FTS4 instead of FTS5 | sql.js WASM build doesn't include FTS5 | 2026-02-16 |
+| Skip pz-mcp-server | Neither version useful for Lua mod dev | 2026-02-16 |
+| Flat GN_ ModData keys | Avoid KahluaTable serialization issues with nested tables | 2026-02-16 |
+| Radius fallback for non-building | Player-built structures return nil from getBuilding() | 2026-02-16 |
+| Issues #13-15 created | Track extension cord, sprite, ATS as separate work items | 2026-02-16 |
 
 ---
 
-## What Was Done (Session 1 — 2026-02-15)
+## What Was Done (Session 2 — 2026-02-16)
 
-### Scaffold Created
-- CLAUDE.md, .claude/context.md, HANDOFF.md
-- .claude/rules/ (pz-modding, lua-architecture, development-workflow, thinking-mode)
-- .gitignore (comprehensive)
+### v2.0 Planning
+- Deep research: IsoBuilding API, RoomDef, setHaveElectricity, setToxic, ModData, vanilla MOGenerator.lua
+- Reviewed prior art: "Generator Powered Buildings" mod (removed from Workshop)
+- Created comprehensive plan with phases, risks, verification steps
+- Identified P0 showstopper: CO suppression tick race
 
-### Issues #5–#12 Created and Fixed (commit 7fc33d2, v0.9.0)
-- #5: Added `common/` folder with `.gitkeep`
-- #6: Changed `pzversion` to `versionMin=42.12.0` in mod.info
-- #7: Changed Debug default to `false` in sandbox-options.txt
-- #8: Added `GN.Commands` constants table in Shared
-- #9: Added player feedback on refuel with count and per-gen %
-- #10: Improved unconnected warning with specific counts
-- #11: Coverage highlights only clear on generator context menus
-- #12: Added `sendServerCommand` feedback + `OnServerCommand` handler
+### _Shared.lua Rewritten
+New v2.0 functions:
+- `getBuildingForGen(gen)` — building detection with 8-adjacent fallback
+- `getAllBuildingSquares(building)` — room-based iteration via RoomDef rects
+- `powerBuilding(building, flag)` — set haveElectricity on all building squares
+- `refreshBuildingPower(building)` — re-check all generators, only clear if LAST deactivates
+- `getGeneratorsInBuilding(building)` — find all valid generators in same building
+- `registerBuilding(building)` / `unregisterBuilding(building)` — managed building tracking
+- `setGeneratorsActivated(player, gens, flag)` — replaces old setClusterActivated
+- OnTick handler for CO fume suppression
+- EveryOneMinute handler for building power maintenance
 
-### .gitignore Updated
-- Added Claude, IDE, OS, temp, archive, Node, Python, PZ runtime, and Workshop patterns
+### GitHub Issues Created
+- #13: Extension cord / outbuilding power
+- #14: Silo generator sprite identification
+- #15: ATS auto-start
 
-### Commit Not Yet Pushed
-- `7fc33d2` is 1 ahead of `origin/main`
-- .gitignore update is uncommitted
+### Side Quest: pz-mcp-server Port
+- Ported to sql.js (WASM), zero native deps, clean build
+- Determined it's not useful for our Lua mod — script-focused, not Lua-focused
+- Code at `c:\xampp\htdocs\pz-mcp-server-port\`
 
 ---
 
 ## Next Steps
 
-1. **Commit and push** .gitignore update + close issues
-2. **Investigate Issue #4** (MP fuel sync) — test `gen:sync()` in multiplayer
-3. **Verify translation file format** — test `Sandbox_EN = { }` wrapper in-game
-4. Version bump and first GitHub release/tag when stable
-5. Consider improvement backlog items below
-
----
-
-## Improvement Backlog
-
-- Add generator count and fuel status to context menu labels
-- Rate limiting on cluster commands (prevent spam)
-- Consider caching cluster membership (invalidate on generator add/remove)
-- Explore EveryTenMinutes hook for automatic fuel equalization option
-- Tooltip or HUD indicator for cluster status
+1. **Rewrite _Client.lua** for v2.0 (building-aware context menu)
+2. **Rewrite _Server.lua** for v2.0 (new command handlers)
+3. **Test CO suppression in-game** (P0 — place generator indoors, activate, sleep)
+4. **Update sandbox-options.txt and translations**
+5. **Version bump mod.info to 2.0.0**
+6. Phase 2: Extended fuel tank
+7. Phase 3: ATS auto-start (Issue #15, defer if complex)
+8. Phase 4: Silo sprite (Issue #14)
 
 ---
 
@@ -93,9 +103,6 @@
 ```bash
 # Check issues
 gh issue list --state open
-
-# View MP sync issue
-gh issue view 4
 
 # Recent commits
 git log --oneline
@@ -112,6 +119,8 @@ git diff origin/main..HEAD
 ## To Resume
 
 ```
-Continue working on Generator Network. Priority: push pending changes, then investigate Issue #4 (MP fuel sync).
+Generator Network — continue with v2.0 Phase 1. _Shared.lua is rewritten.
+Next: rewrite _Client.lua and _Server.lua for building power commands.
 Read CLAUDE.md and .claude/context.md for full project context.
+Plan at .claude/plans/typed-wobbling-bubble.md
 ```
