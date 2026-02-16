@@ -20,7 +20,7 @@ GN.HighlightSquares = GN.HighlightSquares or {}
 function GN.clearCoverageHighlights()
     if not GN.HighlightSquares then return end
     for _, sq in ipairs(GN.HighlightSquares) do
-        if sq and not sq:isNull() then
+        if sq then
             local floor = sq:getFloor()
             if floor then
                 floor:setHighlighted(false)

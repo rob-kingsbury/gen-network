@@ -6,9 +6,10 @@
 
 ```
 ModName/
-├── mod.info                    # Required: mod metadata (root only, NOT in 42/)
+├── mod.info                    # Root mod.info (keep in sync with 42/mod.info)
 ├── common/                     # REQUIRED even if empty — B42 mod detection needs this
 └── 42/                         # Build 42 content folder
+    ├── mod.info                # REQUIRED: B42 reads mod.info from here
     ├── poster.png              # Workshop thumbnail (256x256 recommended)
     └── media/
         ├── sandbox-options.txt # Optional: configurable parameters
@@ -22,6 +23,7 @@ ModName/
 ```
 
 **CRITICAL:** The `common/` folder MUST exist (even if empty) for B42 to detect the mod.
+**CRITICAL:** `42/mod.info` MUST exist — B42 reads mod metadata from the build folder, not root. Keep both copies in sync.
 
 ### mod.info Format
 
@@ -352,7 +354,7 @@ Events.OnFillWorldObjectContextMenu.Add(onFillWorldObjectContextMenu)
 | Sandbox options | Various formats | `VERSION = 1` required, dotted names |
 | SandboxVars access | `SandboxVars.FlatName` | `SandboxVars.ModId.Option` (nested) |
 | Generator activate | `activate()` / `deactivate()` | `setActivated(bool)` + `setSurroundingElectricity()` |
-| mod.info location | Root only | Root only (do NOT put in 42/ subfolder) |
+| mod.info location | Root only | Both root AND `42/mod.info` (B42 reads from build folder) |
 | Script .txt files | Old format | Changed format — manual review required |
 | Saves | B41 format | NOT compatible with B41 saves |
 

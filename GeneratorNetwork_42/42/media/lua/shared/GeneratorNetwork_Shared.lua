@@ -214,11 +214,21 @@ function GN.getGeneratorsInBuilding(building)
         end
     end
 
-    -- Also check adjacent squares (generators on exterior walls).
-    -- They won't be in building squares, but getBuildingForGen would find this building.
-    -- This is handled by the managed buildings tracking instead.
-
     _log(string.format("[BUILDING] Found %d generators in building", #gens))
+    return gens
+end
+
+--- Ensure a generator is included in a list (for exterior wall generators).
+--- Returns the list with gen added if not already present.
+function GN.ensureGenInList(gens, gen)
+    if not _isValidGen(gen) then return gens end
+    local gx, gy, gz = gen:getX(), gen:getY(), gen:getZ()
+    for _, existing in ipairs(gens) do
+        if existing:getX() == gx and existing:getY() == gy and existing:getZ() == gz then
+            return gens
+        end
+    end
+    table.insert(gens, gen)
     return gens
 end
 
@@ -227,11 +237,12 @@ end
 -- ========================================================================
 
 --- Set electricity on all squares in a building.
---- When turning off, checks for other active generators first.
-function GN.powerBuilding(building, flag)
+--- When turning off with force=false (default), checks for other active generators first.
+--- Use force=true to bypass the active generator check.
+function GN.powerBuilding(building, flag, force)
     if not building then return 0 end
 
-    if not flag then
+    if not flag and not force then
         -- Before clearing power, check if other active generators exist in this building.
         local gens = GN.getGeneratorsInBuilding(building)
         for _, gen in ipairs(gens) do
@@ -256,7 +267,7 @@ function GN.powerBuilding(building, flag)
 end
 
 --- Re-apply power for a building after a generator state change.
---- If any generator is still active, power stays on. Otherwise, clear.
+--- If any generator is still active, power stays on. Otherwise, force clear.
 function GN.refreshBuildingPower(building)
     if not building then return end
 
@@ -273,26 +284,20 @@ function GN.refreshBuildingPower(building)
     if hasActive then
         GN.powerBuilding(building, true)
     else
-        -- Force clear since we already know no active generators exist.
-        local squares = GN.getAllBuildingSquares(building)
-        for _, sq in ipairs(squares) do
-            sq:setHaveElectricity(false)
-        end
-        _log(string.format("[POWER] Cleared power for building ID %d (no active generators)",
-            building:getID() or -1))
+        GN.powerBuilding(building, false, true)
     end
 end
 
 --- Register a building as managed by our system.
+--- Caches the generator list so OnTick can avoid expensive rescans.
 function GN.registerBuilding(building)
     if not building then return end
     local id = building:getID()
     if not id then return end
 
-    if not GN.ManagedBuildings[id] then
-        GN.ManagedBuildings[id] = { building = building }
-        _log(string.format("[BUILDING] Registered building ID %d", id))
-    end
+    local gens = GN.getGeneratorsInBuilding(building)
+    GN.ManagedBuildings[id] = { building = building, gens = gens }
+    _log(string.format("[BUILDING] Registered building ID %d with %d cached generators", id, #gens))
 end
 
 --- Unregister a building if it no longer has any managed generators.
@@ -428,9 +433,9 @@ function GN.setGeneratorsActivated(playerObj, gens, flag, building)
                 if active then
                     _log(string.format("[POWER] deactivating gen at %d,%d,%d", x, y, z))
                     gen:setActivated(false)
-                    -- Do NOT call setSurroundingElectricity() here.
-                    -- refreshBuildingPower below handles building power correctly.
-                    -- Vanilla radius clearing would wipe power from other generators' coverage.
+                    -- Clear vanilla radius power. For building mode, refreshBuildingPower
+                    -- will re-apply building power afterward if other gens are still active.
+                    gen:setSurroundingElectricity()
                     changed = changed + 1
                 end
             end
@@ -441,20 +446,6 @@ function GN.setGeneratorsActivated(playerObj, gens, flag, building)
     if building then
         GN.refreshBuildingPower(building)
         GN.registerBuilding(building)
-    else
-        -- No building: for deactivation, call vanilla clearing on each deactivated gen.
-        if not flag then
-            for _, gen in ipairs(gens) do
-                if _isValidGen(gen) and not gen:isActivated() then
-                    gen:setSurroundingElectricity()
-                end
-            end
-        end
-    end
-
-    -- Activate building power if turning on and building exists.
-    if flag and building and changed > 0 then
-        GN.powerBuilding(building, true)
     end
 
     -- Notify about unconnected generators.
@@ -473,24 +464,22 @@ end
 
 --- Called every game tick. Clears toxic flag on buildings with active managed generators.
 --- This fights the Java IsoGenerator.update() which sets toxic=true every tick.
+--- Uses cached generator list from registerBuilding() to avoid expensive building scans.
 local function _onTick()
-    for id, entry in pairs(GN.ManagedBuildings) do
+    for _, entry in pairs(GN.ManagedBuildings) do
         local building = entry.building
         if building and building:isToxic() then
-            -- Check if any generator in this building is active and indoors.
-            local gens = GN.getGeneratorsInBuilding(building)
-            local hasActiveIndoor = false
-            for _, gen in ipairs(gens) do
-                if _isValidGen(gen) and gen:isActivated() then
-                    local sq = gen:getSquare()
-                    if sq and not sq:isOutside() then
-                        hasActiveIndoor = true
-                        break
+            local gens = entry.gens
+            if gens then
+                for _, gen in ipairs(gens) do
+                    if _isValidGen(gen) and gen:isActivated() then
+                        local sq = gen:getSquare()
+                        if sq and not sq:isOutside() then
+                            building:setToxic(false)
+                            break
+                        end
                     end
                 end
-            end
-            if hasActiveIndoor then
-                building:setToxic(false)
             end
         end
     end
@@ -505,11 +494,15 @@ end
 local function _onEveryOneMinute()
     if not isServer() then return end
 
-    -- Re-apply building power for all managed buildings.
+    -- Collect IDs to remove after iteration (mutating during pairs() is undefined in Lua 5.1).
+    local toRemove = {}
+
     for id, entry in pairs(GN.ManagedBuildings) do
         local building = entry.building
         if building then
+            -- Refresh cached generator list.
             local gens = GN.getGeneratorsInBuilding(building)
+            entry.gens = gens
             local hasActive = false
             for _, gen in ipairs(gens) do
                 if _isValidGen(gen) and gen:isActivated() then
@@ -520,14 +513,16 @@ local function _onEveryOneMinute()
             if hasActive then
                 GN.powerBuilding(building, true)
             else
-                -- No active generators: unregister.
-                GN.ManagedBuildings[id] = nil
-                _log(string.format("[MAINT] Unregistered building ID %s (no active generators)", tostring(id)))
+                table.insert(toRemove, id)
             end
         else
-            -- Stale entry.
-            GN.ManagedBuildings[id] = nil
+            table.insert(toRemove, id)
         end
+    end
+
+    for _, id in ipairs(toRemove) do
+        GN.ManagedBuildings[id] = nil
+        _log(string.format("[MAINT] Unregistered building ID %s", tostring(id)))
     end
 
     -- Initial power application after load.

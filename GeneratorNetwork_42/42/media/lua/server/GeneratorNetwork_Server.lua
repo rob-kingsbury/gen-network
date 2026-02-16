@@ -38,6 +38,7 @@ local function _handleBuildingOnOff(playerObj, gen, x, y, z, flag)
     end
 
     local gens = GN.getGeneratorsInBuilding(building)
+    GN.ensureGenInList(gens, gen)
     local changed, skipped, failed = GN.setGeneratorsActivated(playerObj, gens, flag, building)
 
     if changed > 0 then
@@ -68,6 +69,7 @@ local function _handleRefuelBuilding(playerObj, gen)
     end
 
     local gens = GN.getGeneratorsInBuilding(building)
+    GN.ensureGenInList(gens, gen)
     local count, perFuel = GN.distributeFuelEvenly(gens)
 
     GN.notifyPlayer(playerObj,

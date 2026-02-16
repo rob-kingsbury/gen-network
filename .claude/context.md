@@ -1,8 +1,8 @@
 ---
 project: Generator Network
 description: PZ mod — industrial generator system with building-based power, CO suppression, extended fuel tanks
-last_session: 3
-continue_with: "In-game CO suppression test (P0), then Phase 2 extended fuel tank"
+last_session: 4
+continue_with: "In-game testing: mods page load, CO suppression P0, then Phase 2 extended fuel tank"
 
 tech:
   stack: pz-lua-mod
@@ -89,7 +89,7 @@ Full plan at `.claude/plans/typed-wobbling-bubble.md`.
 
 ### Key APIs Confirmed
 - `sq:getBuilding()` → IsoBuilding (nil for player-built)
-- `building:getDef():getRooms()` → ArrayList of RoomDef
+- `building:getDef():getRooms()` → ArrayList of RoomDef (each has getRects() → RoomRect with x,y,w,h fields)
 - `sq:setHaveElectricity(bool)` → per-square power control
 - `building:setToxic(false)` → CO fume suppression
 - `gen:getModData()` → KahluaTable for extended fuel state
@@ -205,3 +205,32 @@ Java `IsoGenerator.update()` calls `building:setToxic(true)` every tick. Must us
 
 **Not yet done:**
 - In-game CO suppression prototype test (P0 — must do before relying on building power)
+
+### Session 4 (2026-02-16): Full Code Audit
+
+**Audit:**
+- Launched 4 parallel research agents: B42.12+ API compat, config files, RoomRect API, OnTick performance
+- Manual line-by-line audit of all 3 Lua files
+
+**Bugs fixed in _Shared.lua (6):**
+1. Table mutation during `pairs()` in `_onEveryOneMinute` — collect removal IDs in separate list
+2. Vanilla radius power leak on building deactivation — added `setSurroundingElectricity()` call
+3. Exterior wall generators missed by `getGeneratorsInBuilding` — added `ensureGenInList()` helper
+4. OnTick performance — cached generator list in `ManagedBuildings` entries instead of re-scanning
+5. Removed redundant `powerBuilding` call after `refreshBuildingPower`
+6. DRY: merged power-clear logic into `powerBuilding(building, flag, force)` parameter
+
+**Fixes in _Server.lua (2):**
+- Added `ensureGenInList(gens, gen)` calls in both building handlers
+
+**Fixes in _Client.lua (1):**
+- Removed undocumented `sq:isNull()` API call
+
+**Config/doc fixes:**
+- `Sandbox_EN.txt`: Added `Sandbox_EN = { }` table wrapper + page name entry
+- `pz-modding.md`: Fixed mod.info placement docs (42/mod.info IS required by B42)
+- `context.md`: Fixed RoomRect field documentation (w,h not x2,y2)
+
+**Not yet done:**
+- In-game CO suppression test (P0)
+- Phase 2: Extended fuel tank via ModData

@@ -30,7 +30,6 @@ $RECYCLE.BIN/
 *.orig
 temp_*/
 test_*/
-scroll-analysis-output/
 
 # Archives / Large binaries
 *.zip
