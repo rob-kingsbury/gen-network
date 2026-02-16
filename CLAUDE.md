@@ -2,7 +2,7 @@
 
 A Project Zomboid mod (B42.12+) that links vanilla generators into fuel-sharing, activation clusters with visual coverage highlighting. Replaces the vanilla per-generator radius model with a networked cluster approach.
 
-**Repo:** `rob-kingsbury/gen-network` | **Mod ID:** `GeneratorNetwork` | **Version:** 0.8.8
+**Repo:** `rob-kingsbury/gen-network` | **Mod ID:** `GeneratorNetwork` | **Version:** 0.9.0
 
 ---
 
@@ -132,9 +132,8 @@ Player right-clicks generator → Client adds context menu options
 | # | Issue | Status | Notes |
 |---|-------|--------|-------|
 | 4 | MP fuel sync may not propagate to clients | OPEN | `sendObjectChange("fuel")` may not trigger client display update. Consider `gen:sync()` |
-| 3 | Duplicate mod.info | CLOSED | Fixed in e556a29 |
-| 2 | activate()/deactivate() don't exist in B42 | CLOSED | Fixed: using setActivated() + setSurroundingElectricity() |
-| 1 | sandbox-options.txt wrong format | CLOSED | Fixed: VERSION = 1, dotted names |
+
+Issues #1–#3 closed in e556a29. Issues #5–#12 closed in 7fc33d2 (v0.9.0).
 
 ---
 
@@ -148,12 +147,22 @@ Player right-clicks generator → Client adds context menu options
 
 ---
 
+## SLASH COMMANDS
+
+| Command | Purpose |
+|---------|---------|
+| `/session-start` | Load context, check issues, confirm readiness |
+| `/handoff` | End session: persist todos, clean workspace, commit, push |
+
+---
+
 ## REFERENCE FILES
 
 | File | Purpose | When to Read |
 |------|---------|--------------|
 | `.claude/context.md` | Project state | Session start |
 | `.claude/rules/*.md` | Lua/PZ/workflow rules | Before coding |
+| `.claude/commands/*.md` | Slash command definitions | When modifying commands |
 | `HANDOFF.md` | Current priorities | Session start |
 | `GeneratorNetwork_Shared.lua` | Core logic | Before any logic changes |
 | `sandbox-options.txt` | Config format | When adding options |

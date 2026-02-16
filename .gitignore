@@ -3,6 +3,7 @@
 .claude/credentials.md
 .claude/agent-history.json
 .claude/curiosity-queue.json
+.claude/todos.json
 
 # IDE
 .vscode/
@@ -12,17 +13,21 @@
 *~
 *.sublime-project
 *.sublime-workspace
+*.code-workspace
 
 # OS
 Thumbs.db
 .DS_Store
 desktop.ini
 ehthumbs.db
+$RECYCLE.BIN/
+*.lnk
 
 # Temp / Analysis
 *.tmp
 *.bak
 *.log
+*.orig
 temp_*/
 test_*/
 scroll-analysis-output/
@@ -31,3 +36,24 @@ scroll-analysis-output/
 *.zip
 *.tar.gz
 *.7z
+*.rar
+
+# Node (if tooling is ever added)
+node_modules/
+package-lock.json
+
+# Python (if tooling is ever added)
+__pycache__/
+*.pyc
+.venv/
+
+# PZ mod development - don't track compiled or runtime artifacts
+*.class
+*.jar
+*.cache
+zomboid-cache/
+Zomboid/
+
+# Workshop upload artifacts
+workshop.txt
+preview.png.bak
