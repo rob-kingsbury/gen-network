@@ -1,8 +1,8 @@
 ---
 project: Generator Network
 description: PZ mod — industrial generator system with building-based power, CO suppression, extended fuel tanks
-last_session: 4
-continue_with: "In-game testing: mods page load, CO suppression P0, then Phase 2 extended fuel tank"
+last_session: 5
+continue_with: "Fix Issue #17 (power leak) and Issue #18 (CO2 regression) — test on new save"
 
 tech:
   stack: pz-lua-mod
@@ -51,10 +51,13 @@ A Project Zomboid mod (Build 42.12+) that provides industrial generator behavior
 
 | # | Title | Labels | Priority |
 |---|-------|--------|----------|
+| 17 | Power leaks outside building/structure boundaries | bug | HIGH |
+| 18 | CO2 poisoning recurs after power containment refactor | bug | HIGH |
 | 4 | MP fuel sync may not propagate to clients | bug | MEDIUM |
 | 13 | Extension cord: extend power to outbuildings via electrical wire | enhancement | LOW |
 | 14 | Silo generator sprite: identify and register industrial prop | enhancement | LOW |
 | 15 | ATS auto-start: activate generators on grid power loss | enhancement | MEDIUM |
+| 16 | Silo generator: re-skin as moveable multi-part prop | enhancement | LOW |
 
 ## Closed Issues
 
@@ -110,7 +113,7 @@ Java `IsoGenerator.update()` calls `building:setToxic(true)` every tick. Must us
 | Metric | Value |
 |--------|-------|
 | Mod version | 2.0.0 |
-| Open issues | 4 (#4, #13, #14, #15) |
+| Open issues | 7 (#4, #13-#18) |
 | Closed issues | 11 (#1-#3, #5-#12) |
 | Branches | 1 (main) |
 
@@ -234,3 +237,39 @@ Java `IsoGenerator.update()` calls `building:setToxic(true)` every tick. Must us
 **Not yet done:**
 - In-game CO suppression test (P0)
 - Phase 2: Extended fuel tank via ModData
+
+### Session 5 (2026-02-16): Flood-fill structures, in-game testing, power containment research
+
+**Phase A implemented: Flood-fill structure detection**
+- BFS flood-fill from generator square, bounded by walls, doors passable
+- Three-tier detection: `getBuilding()` → flood-fill → radius fallback
+- `ManagedStructures` table tracks player-built structures
+- CO suppression extended to structures via cached building refs
+
+**In-game testing revealed 4 bugs:**
+1. CO poisoning in player-built structures (fixed via cached building refs)
+2. Coverage showing all Z floors overlapping (fixed: Z-level filtering)
+3. Warehouse retains power after generator moved (fixed: `cleanupStaleBuildings()`)
+4. Power leaks outside building boundaries (partially addressed — see below)
+
+**Deep research into PZ Java internals (3 parallel agents):**
+- `setActivated(true)` internally calls `setSurroundingElectricity()` — our `containPower` skip was always a no-op
+- B42 has dual power: legacy `haveElectricity` + chunk-based `hasGridPower()`
+- `setHaveElectricity` is deprecated in B42 but functional
+- No pure-Lua PZ mod has solved power containment
+- Java does NOT periodically reset the `haveElectricity` field
+
+**Power containment approach (implemented, untested):**
+- `scrubLeakedPower()`: clears `haveElectricity` outside building + tries chunk deregistration via pcall
+- `containPower()`: powers building squares + scrubs leaked radius
+- `setGeneratorsActivated()` simplified: removed useless `containPower` param and explicit `setSurroundingElectricity()` calls
+- Server handlers call `containPower()` after activation
+- `_onEveryOneMinute` uses `containPower()` for periodic maintenance
+
+**Other fixes:**
+- Coverage colors changed to green matching vanilla
+- `isServer()` guard changed to `isClient()` for single-player compatibility
+- Added mod sync rule to development workflow
+
+**Issues created:** #16, #17, #18
+**Bugs remaining:** #17 (power leak), #18 (CO2 regression)

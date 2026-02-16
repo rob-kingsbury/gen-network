@@ -28,6 +28,20 @@
 3. Keep changes focused on the task
 4. No over-engineering — PZ modding favors simplicity
 5. Commit with clear messages describing what and why
+6. **Sync to PZ mods folder after every change** (see below)
+
+## Mod Sync (REQUIRED)
+
+After **every** code change, sync repo files to the PZ mods folder so the user can test in-game:
+
+```bash
+cp -r "c:/xampp/htdocs/gen-network/GeneratorNetwork_42/"* "C:/Users/roban/Zomboid/mods/GeneratorNetwork_42/"
+```
+
+**Source:** `c:/xampp/htdocs/gen-network/GeneratorNetwork_42/`
+**Destination:** `C:/Users/roban/Zomboid/mods/GeneratorNetwork_42/`
+
+Do NOT wait for the user to ask — sync immediately after editing files.
 
 ### When Stuck or Unsure
 

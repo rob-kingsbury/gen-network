@@ -39,7 +39,16 @@ local function _handleBuildingOnOff(playerObj, gen, x, y, z, flag)
 
     local gens = GN.getGeneratorsInBuilding(building)
     GN.ensureGenInList(gens, gen)
-    local changed, skipped, failed = GN.setGeneratorsActivated(playerObj, gens, flag, building)
+    local changed, skipped, failed = GN.setGeneratorsActivated(playerObj, gens, flag)
+
+    -- Manage building power after toggling generators.
+    if flag then
+        GN.containPower(GN.getAllBuildingSquares(building), gens)
+        GN.registerBuilding(building)
+    else
+        GN.refreshBuildingPower(building)
+        GN.registerBuilding(building)
+    end
 
     if changed > 0 then
         if flag then
@@ -83,12 +92,91 @@ local function _handleRefuelBuilding(playerObj, gen)
 end
 
 -- ------------------------------------------------------------------------
+-- Structure commands (flood-fill detected, player-built)
+-- ------------------------------------------------------------------------
+
+local function _handleStructureOnOff(playerObj, gen, x, y, z, flag)
+    local sq = gen:getSquare()
+    if not sq then
+        GN.notifyPlayer(playerObj, "Generator square not found.")
+        return
+    end
+
+    local squares = GN.floodFillFrom(sq)
+    if not squares then
+        GN.notifyPlayer(playerObj, "Structure is not enclosed. Close all walls and try again.")
+        return
+    end
+
+    local gens = GN.getGeneratorsInSquares(squares)
+    GN.ensureGenInList(gens, gen)
+    local changed, skipped, failed = GN.setGeneratorsActivated(playerObj, gens, flag)
+
+    -- Manage structure power after toggling generators.
+    if flag then
+        GN.containPower(squares, gens)
+        GN.registerStructure(sq, squares)
+        GN.cleanupStaleBuildings()
+    else
+        GN.powerStructure(squares, false, true)
+    end
+
+    if changed > 0 then
+        if flag then
+            GN.notifyPlayer(playerObj,
+                string.format("Structure: %d generators activated, %d squares powered.",
+                    changed, #squares))
+        else
+            GN.notifyPlayer(playerObj,
+                string.format("Structure: %d generators deactivated.", changed))
+        end
+    elseif changed == 0 and skipped == 0 and failed == 0 then
+        GN.notifyPlayer(playerObj, "No generators to change.")
+    end
+
+    sendServerCommand(playerObj, GN.ModId, CMD.StructureResult, {
+        action = flag and CMD.StructureOn or CMD.StructureOff,
+        changed = tostring(changed),
+        skipped = tostring(skipped),
+        failed = tostring(failed),
+        squares = tostring(#squares),
+    })
+end
+
+local function _handleRefuelStructure(playerObj, gen)
+    local sq = gen:getSquare()
+    if not sq then
+        GN.notifyPlayer(playerObj, "Generator square not found.")
+        return
+    end
+
+    local squares = GN.floodFillFrom(sq)
+    if not squares then
+        GN.notifyPlayer(playerObj, "Structure is not enclosed.")
+        return
+    end
+
+    local gens = GN.getGeneratorsInSquares(squares)
+    GN.ensureGenInList(gens, gen)
+    local count, perFuel = GN.distributeFuelEvenly(gens)
+
+    GN.notifyPlayer(playerObj,
+        string.format("Structure refueled: %d generators at %.1f%% each.", count, perFuel))
+
+    sendServerCommand(playerObj, GN.ModId, CMD.StructureResult, {
+        action = CMD.RefuelStructure,
+        count = tostring(count),
+        perFuel = tostring(perFuel),
+    })
+end
+
+-- ------------------------------------------------------------------------
 -- Radius fallback commands
 -- ------------------------------------------------------------------------
 
 local function _handleRadiusOnOff(playerObj, x, y, z, flag)
     local gens = GN.getGeneratorsAround(x, y, z, GN.ClusterRadius)
-    local changed, skipped, failed = GN.setGeneratorsActivated(playerObj, gens, flag, nil)
+    local changed, skipped, failed = GN.setGeneratorsActivated(playerObj, gens, flag)
 
     if changed > 0 then
         if flag then
@@ -156,6 +244,23 @@ local function onClientCommand(module, command, playerObj, args)
             _handleBuildingOnOff(playerObj, gen, x, y, z, false)
         elseif action == CMD.RefuelBuilding then
             _handleRefuelBuilding(playerObj, gen)
+        end
+
+    -- Structure commands (flood-fill detected, player-built).
+    elseif action == CMD.StructureOn or action == CMD.StructureOff or action == CMD.RefuelStructure then
+        local gen = _getGenAt(x, y, z)
+        if not gen then
+            _log(string.format("onClientCommand: no valid generator at %d,%d,%d", x, y, z))
+            GN.notifyPlayer(playerObj, "No generator found at that location.")
+            return
+        end
+
+        if action == CMD.StructureOn then
+            _handleStructureOnOff(playerObj, gen, x, y, z, true)
+        elseif action == CMD.StructureOff then
+            _handleStructureOnOff(playerObj, gen, x, y, z, false)
+        elseif action == CMD.RefuelStructure then
+            _handleRefuelStructure(playerObj, gen)
         end
 
     -- Radius fallback commands use area search.

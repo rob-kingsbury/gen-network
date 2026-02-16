@@ -16,8 +16,32 @@ end
 -- ------------------------------------------------------------------------
 
 GN.HighlightSquares = GN.HighlightSquares or {}
+GN.CoverageGridActive = false
+
+--- Draw per-square grid lines over highlighted coverage area (current floor only).
+local function _renderCoverageGrid()
+    if not GN.HighlightSquares or #GN.HighlightSquares == 0 then
+        Events.OnTick.Remove(_renderCoverageGrid)
+        GN.CoverageGridActive = false
+        return
+    end
+    local player = getSpecificPlayer(0)
+    local pz = player and math.floor(player:getZ()) or 0
+    for _, sq in ipairs(GN.HighlightSquares) do
+        if sq then
+            local x, y, z = sq:getX(), sq:getY(), sq:getZ()
+            if z == pz then
+                addAreaHighlightForPlayer(0, x, y, x + 1, y + 1, z, 0.2, 0.8, 0.2, 0.15)
+            end
+        end
+    end
+end
 
 function GN.clearCoverageHighlights()
+    if GN.CoverageGridActive then
+        Events.OnTick.Remove(_renderCoverageGrid)
+        GN.CoverageGridActive = false
+    end
     if not GN.HighlightSquares then return end
     for _, sq in ipairs(GN.HighlightSquares) do
         if sq then
@@ -31,11 +55,14 @@ function GN.clearCoverageHighlights()
     _log("[COVERAGE] cleared highlights")
 end
 
---- Highlight all squares belonging to a building.
+--- Highlight all squares belonging to a building (current floor only).
 function GN.showBuildingCoverage(building)
     if not building then return end
 
     GN.clearCoverageHighlights()
+
+    local player = getSpecificPlayer(0)
+    local pz = player and math.floor(player:getZ()) or 0
 
     local squares = GN.getAllBuildingSquares(building)
     if #squares == 0 then
@@ -44,17 +71,56 @@ function GN.showBuildingCoverage(building)
     end
 
     for _, sq in ipairs(squares) do
-        local floor = sq:getFloor()
-        if floor then
-            floor:setHighlighted(true)
-            table.insert(GN.HighlightSquares, sq)
+        if sq:getZ() == pz then
+            local floor = sq:getFloor()
+            if floor then
+                floor:setHighlighted(true, false)
+                floor:setHighlightColor(0.2, 0.8, 0.2, 0.6)
+                table.insert(GN.HighlightSquares, sq)
+            end
         end
+    end
+
+    if not GN.CoverageGridActive then
+        Events.OnTick.Add(_renderCoverageGrid)
+        GN.CoverageGridActive = true
     end
 
     _log(string.format("[COVERAGE] highlighted %d building squares", #GN.HighlightSquares))
 end
 
---- Highlight radius coverage around all generators in a cluster (v1.0 fallback).
+--- Highlight all squares discovered by flood-fill (current floor only).
+function GN.showStructureCoverage(squares)
+    if not squares or #squares == 0 then
+        GN.notifyPlayer(getSpecificPlayer(0), "No structure squares found.")
+        return
+    end
+
+    GN.clearCoverageHighlights()
+
+    local player = getSpecificPlayer(0)
+    local pz = player and math.floor(player:getZ()) or 0
+
+    for _, sq in ipairs(squares) do
+        if sq:getZ() == pz then
+            local floor = sq:getFloor()
+            if floor then
+                floor:setHighlighted(true, false)
+                floor:setHighlightColor(0.2, 0.8, 0.2, 0.6)
+                table.insert(GN.HighlightSquares, sq)
+            end
+        end
+    end
+
+    if not GN.CoverageGridActive then
+        Events.OnTick.Add(_renderCoverageGrid)
+        GN.CoverageGridActive = true
+    end
+
+    _log(string.format("[COVERAGE] highlighted %d structure squares", #GN.HighlightSquares))
+end
+
+--- Highlight radius coverage around all generators in a cluster (current floor only).
 function GN.showRadiusCoverage(sq)
     if not sq then return end
 
@@ -65,6 +131,9 @@ function GN.showRadiusCoverage(sq)
     end
 
     GN.clearCoverageHighlights()
+
+    local player = getSpecificPlayer(0)
+    local pz = player and math.floor(player:getZ()) or 0
 
     local x, y, z = sq:getX(), sq:getY(), sq:getZ()
     local radius = GN.ClusterRadius or 20
@@ -80,19 +149,27 @@ function GN.showRadiusCoverage(sq)
     for _, gen in ipairs(gens) do
         if GN.isValidGen(gen) then
             local gx, gy, gz = gen:getX(), gen:getY(), gen:getZ()
-            for wx = gx - radius, gx + radius do
-                for wy = gy - radius, gy + radius do
-                    local sq2 = cell:getGridSquare(wx, wy, gz)
-                    if sq2 then
-                        local floor = sq2:getFloor()
-                        if floor then
-                            floor:setHighlighted(true)
-                            table.insert(GN.HighlightSquares, sq2)
+            if gz == pz then
+                for wx = gx - radius, gx + radius do
+                    for wy = gy - radius, gy + radius do
+                        local sq2 = cell:getGridSquare(wx, wy, gz)
+                        if sq2 then
+                            local floor = sq2:getFloor()
+                            if floor then
+                                floor:setHighlighted(true, false)
+                                floor:setHighlightColor(0.2, 0.8, 0.2, 0.6)
+                                table.insert(GN.HighlightSquares, sq2)
+                            end
                         end
                     end
                 end
             end
         end
+    end
+
+    if not GN.CoverageGridActive then
+        Events.OnTick.Add(_renderCoverageGrid)
+        GN.CoverageGridActive = true
     end
 
     _log(string.format("[COVERAGE] highlighted %d radius squares", #GN.HighlightSquares))
@@ -142,8 +219,14 @@ local function onFillWorldObjectContextMenu(playerNum, context, worldobjects, te
         sendClientCommand(GN.ModId, action, { x = x, y = y, z = z })
     end
 
-    -- Detect building vs radius mode.
+    -- Three-way detection: building → structure (flood-fill) → radius fallback.
     local building = GN.getBuildingForGen(gen)
+    local structureSquares = nil
+
+    if not building then
+        -- Try flood-fill for player-built structures.
+        structureSquares = GN.floodFillFrom(sq)
+    end
 
     if building then
         -- Building mode: power the entire building through wiring.
@@ -162,8 +245,27 @@ local function onFillWorldObjectContextMenu(playerNum, context, worldobjects, te
         context:addOption("Show Building Coverage", nil, function()
             GN.showBuildingCoverage(building)
         end)
+
+    elseif structureSquares then
+        -- Structure mode: flood-fill detected enclosed area.
+        context:addOption("Turn Structure On", nil, function()
+            send(CMD.StructureOn)
+        end)
+
+        context:addOption("Turn Structure Off", nil, function()
+            send(CMD.StructureOff)
+        end)
+
+        context:addOption("Refuel Structure Generators", nil, function()
+            send(CMD.RefuelStructure)
+        end)
+
+        context:addOption("Show Structure Coverage", nil, function()
+            GN.showStructureCoverage(structureSquares)
+        end)
+
     else
-        -- Radius fallback: v1.0 cluster behavior for outdoor/player-built placement.
+        -- Radius fallback: open area, no enclosure detected.
         context:addOption("Turn Cluster On", nil, function()
             send(CMD.RadiusOn)
         end)
@@ -195,7 +297,7 @@ Events.OnFillWorldObjectContextMenu.Add(onFillWorldObjectContextMenu)
 local function onServerCommand(module, command, args)
     if module ~= GN.ModId then return end
 
-    if command == CMD.BuildingResult or command == CMD.RadiusResult then
+    if command == CMD.BuildingResult or command == CMD.StructureResult or command == CMD.RadiusResult then
         if args then
             _log(string.format("[CL] Result: command=%s action=%s",
                 tostring(command), tostring(args.action or "?")))
