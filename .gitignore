@@ -1,0 +1,33 @@
+# Claude Code
+.claude/settings.local.json
+.claude/credentials.md
+.claude/agent-history.json
+.claude/curiosity-queue.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+ehthumbs.db
+
+# Temp / Analysis
+*.tmp
+*.bak
+*.log
+temp_*/
+test_*/
+scroll-analysis-output/
+
+# Archives / Large binaries
+*.zip
+*.tar.gz
+*.7z

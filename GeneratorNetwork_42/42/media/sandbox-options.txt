@@ -2,7 +2,7 @@ VERSION = 1,
 
 option GeneratorNetwork.Debug
 {
-    type = boolean, default = true,
+    type = boolean, default = false,
     page = GeneratorNetwork,
     translation = GeneratorNetwork_Debug,
 }

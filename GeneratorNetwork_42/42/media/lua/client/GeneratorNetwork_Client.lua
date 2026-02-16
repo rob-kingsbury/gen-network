@@ -1,10 +1,10 @@
 -- GeneratorNetwork_Client.lua
--- Client-side context menu + command sender for Generator Network 0.8.8
--- Adds "Show Cluster Coverage" that persists until the next context menu is opened.
+-- Client-side context menu + command sender for Generator Network 0.9.0
 
 require "GeneratorNetwork_Shared"
 
 local GN = GeneratorNetwork
+local CMD = GN.Commands
 
 local function _log(msg)
     GN.log("[CL] " .. tostring(msg))
@@ -107,10 +107,13 @@ local function onFillWorldObjectContextMenu(playerNum, context, worldobjects, te
     local player = getSpecificPlayer(playerNum)
     if not player then return end
 
-    -- Opening any new context menu clears previous coverage.
-    GN.clearCoverageHighlights()
-
     local gen, sq = getGeneratorFromWorldObjects(worldobjects)
+
+    -- Only clear coverage when opening a generator context menu (not all menus).
+    if gen then
+        GN.clearCoverageHighlights()
+    end
+
     if not gen or not sq then return end
 
     local x, y, z = sq:getX(), sq:getY(), sq:getZ()
@@ -121,22 +124,42 @@ local function onFillWorldObjectContextMenu(playerNum, context, worldobjects, te
     end
 
     context:addOption("Refuel Cluster", nil, function()
-        send("RefuelCluster")
+        send(CMD.RefuelCluster)
     end)
 
     context:addOption("Turn Cluster On", nil, function()
-        send("ClusterOn")
+        send(CMD.ClusterOn)
     end)
 
     context:addOption("Turn Cluster Off", nil, function()
-        send("ClusterOff")
+        send(CMD.ClusterOff)
     end)
 
     context:addOption("Show Cluster Coverage", nil, function()
         GN.showClusterCoverageFromSquare(sq)
     end)
+
+    context:addOption("Clear Coverage", nil, function()
+        GN.clearCoverageHighlights()
+    end)
 end
 
 Events.OnFillWorldObjectContextMenu.Add(onFillWorldObjectContextMenu)
+
+-- ------------------------------------------------------------------------
+-- Server response handler
+-- ------------------------------------------------------------------------
+
+local function onServerCommand(module, command, args)
+    if module ~= GN.ModId then return end
+    if command ~= CMD.ClusterResult then return end
+
+    if args then
+        _log(string.format("[CL] ClusterResult: action=%s",
+            tostring(args.action or "?")))
+    end
+end
+
+Events.OnServerCommand.Add(onServerCommand)
 
 _log("Client script loaded")
